@@ -5,6 +5,7 @@ This project implements a high-performance pipeline for aerodynamic shape optimi
 ---
 
 ## 🚀 Key Features
+
 * **Flexible Geometry Generation:** Supports both NACA 4-digit configurations and Bézier Curves to define complex aerodynamic profiles.
 * **Physics-Backed Simulations:** Integrated with `XFoil`/`AeroSandbox` for high-fidelity aerodynamic polar generation and boundary layer analysis.
 * **Bayesian Optimization:** Utilizes `Optuna` to efficiently explore the design space and generate a robust dataset of airfoils optimized for maximum lift-to-drag ($L/D$) ratios.
@@ -85,11 +86,15 @@ cd airfoil-ai-opt
 ```Bash
 python -m venv .venv
 ```
+
 On Windows:
+
 ```Bash
 .venv/bin/activate
 ```
+
 On Mac/Linux:
+
 ```Bash
 source .venv\Scripts\activate
 ```
