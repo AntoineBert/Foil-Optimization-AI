@@ -11,6 +11,7 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.preprocessing import StandardScaler
 import joblib
 import os
+import optuna.visualization as vis
 
 class AirfoilAI:
     def __init__(self, model_path=None, scaler_path=None):
@@ -35,7 +36,7 @@ class AirfoilAI:
     def train(self, csv_path):
         df = pd.read_csv(csv_path)
         X = df[['velocity', 'altitude']]
-        y = df[['best_m', 'best_p', 'best_t']]
+        y = df[['best_m', 'best_p', 'best_t','finesse_max']]
         
         X_scaled = self.scaler.fit_transform(X)
         
@@ -53,6 +54,27 @@ class AirfoilAI:
         pred = self.model.predict(input_scaled)[0]
         m, p, t = int(round(pred[0])), int(round(pred[1])), int(round(pred[2]))
         return f"{m}{p}{t:02d}"
+    
+    def predict_performance(self, velocity, altitude):
+        if self.model is None or self.scaler is None:
+            raise Exception("AI not initialized.")
+
+        input_data = pd.DataFrame([[velocity, altitude]], columns=['velocity', 'altitude'])
+        input_scaled = self.scaler.transform(input_data)
+        
+        pred = self.model.predict(input_scaled)[0]
+        
+        # Post-processing
+        m, p, t = int(round(pred[0])), int(round(pred[1])), int(round(pred[2]))
+        finesse = pred[3]
+        
+        naca_code = f"{m}{p}{t:02d}"
+        
+        return {
+            "naca": naca_code,
+            "finesse": round(finesse, 2),
+            "params": (m, p, t)
+        }
 
     def save_model(self, folder="../models"):
         """Saves both model and scaler to the specified folder."""
@@ -71,7 +93,6 @@ class AirfoilOptimizer:
         self.alpha = alpha
 
     def _objective(self, trial, v_target, alt_target):
-        """The internal objective function that Optuna will call."""
         m = trial.suggest_int("m", 0, 9)
         p = trial.suggest_int("p", 0, 9)
         t = trial.suggest_int("t", 1, 40)
@@ -88,14 +109,38 @@ class AirfoilOptimizer:
         
         if cd <= 1e-6 or cl <= 0:
             return 0
-        
         return cl / cd
 
-    def find_best_airfoil(self, v_target, alt_target, n_trials=50):
-        """Orchestrates the Optuna study for a specific condition."""
+    def find_best_airfoil(self, v_target, alt_target, n_trials=50, early_stop=None, show_history=False):
+        """
+        Orchestrates the Optuna study.
+        If early_stop is an integer, optimization stops after n trials without improvement.
+        """
         optuna.logging.set_verbosity(optuna.logging.WARNING)
         study = optuna.create_study(direction="maximize")
         
-        study.optimize(lambda t: self._objective(t, v_target, alt_target), n_trials=n_trials)
+        callbacks = []
+        
+        if early_stop is not None:
+            def early_stopping_callback(study, trial):
+                if study.best_trial.number < trial.number - early_stop:
+                    study.stop()
+            callbacks.append(early_stopping_callback)
+            
+        study.optimize(
+            lambda t: self._objective(t, v_target, alt_target), 
+            n_trials=n_trials,
+            callbacks=callbacks
+        )
+        
+        if show_history:
+            print(f"📊 Study completed in {len(study.trials)} trials.")
+            fig = vis.plot_optimization_history(study)
+            fig.update_layout(
+                title=f"Convergence: V={v_target:.1f} m/s, Alt={alt_target:.0f} m",
+                width=800, height=450,
+                template="plotly_white"
+            )
+            fig.show()
         
         return study.best_params, study.best_value
